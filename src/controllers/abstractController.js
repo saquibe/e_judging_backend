@@ -6,25 +6,24 @@ import PresentationAssessment from "../models/PresentationAssessment.js";
 export const getAllAbstracts = async (req, res) => {
     try {
         const { type, track, hall, sort, search, judged } = req.query;
-        const judgeId = req.user?._id;  // from protect middleware
 
-        // Fetch all
+        // Fetch all abstracts
         const [eposters, presentations] = await Promise.all([
             Eposter.find(),
             Presentation.find()
         ]);
 
-        // fetch all assessments of this judge
+        // Fetch ALL assessments (NOT judge based)
         const [eposterAssessments, presentationAssessments] = await Promise.all([
-            EposterAssessment.find({ judgeId }),
-            PresentationAssessment.find({ judgeId })
+            EposterAssessment.find(),
+            PresentationAssessment.find()
         ]);
 
-        // Convert to lookup map for fast check
+        // Create lookup maps
         const eposterDoneMap = new Set(eposterAssessments.map(a => a.abstractId.toString()));
         const presentationDoneMap = new Set(presentationAssessments.map(a => a.abstractId.toString()));
 
-        // Merge results
+        // Merge abstracts
         let merged = [
             ...eposters.map(e => ({
                 id: e._id,
@@ -48,26 +47,26 @@ export const getAllAbstracts = async (req, res) => {
             }))
         ];
 
-        // Filter by type
+        // Filter type
         if (type) merged = merged.filter(i => i.type === type);
 
         // Filter by track
         if (track) {
-            merged = merged.filter(i => i.track?.toLowerCase().includes(track.toLowerCase()));
+            merged = merged.filter(i =>
+                i.track?.toLowerCase().includes(track.toLowerCase())
+            );
         }
 
         // Filter by hall
         if (hall) {
-            merged = merged.filter(i => i.hall?.toLowerCase() === hall.toLowerCase());
+            merged = merged.filter(i =>
+                i.hall?.toLowerCase() === hall.toLowerCase()
+            );
         }
 
-        // Filter by judged status
-        if (judged === "true") {
-            merged = merged.filter(i => i.isJudged === true);
-        }
-        if (judged === "false") {
-            merged = merged.filter(i => i.isJudged === false);
-        }
+        // Filter by judged / unjudged
+        if (judged === "true") merged = merged.filter(i => i.isJudged === true);
+        if (judged === "false") merged = merged.filter(i => i.isJudged === false);
 
         // Searching
         if (search) {
