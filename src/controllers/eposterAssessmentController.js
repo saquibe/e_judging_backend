@@ -3,12 +3,16 @@ import EposterAssessment from "../models/EposterAssessment.js";
 export const getSingleEposter = async (req, res) => {
     try {
         const { abstractNo } = req.params;
+        const judgeId = req.admin._id;
 
         const poster = await Eposter.findOne({ abstractNo });
         if (!poster) return res.status(404).json({ message: "ePoster not found" });
 
-        const assessment = await EposterAssessment.findOne({ abstractId: poster._id })
-            .populate("judgeId", "email");
+        // 🔥 Fetch ONLY this admin's assessment
+        const assessment = await EposterAssessment.findOne({
+            abstractId: poster._id,
+            judgeId
+        });
 
         res.json({
             ...poster.toObject(),
@@ -21,18 +25,22 @@ export const getSingleEposter = async (req, res) => {
         res.status(500).json({ message: "Error fetching ePoster" });
     }
 };
-
 export const submitEposterAssessment = async (req, res) => {
     try {
         const { abstractNo, scores, comments } = req.body;
-        const judgeId = req.admin._id;   // FIXED
+        const judgeId = req.admin._id;
 
         const poster = await Eposter.findOne({ abstractNo });
         if (!poster) return res.status(404).json({ message: "ePoster not found" });
 
-        const exists = await EposterAssessment.findOne({ abstractId: poster._id });
+        // 🔥 Check if THIS admin already judged THIS abstract
+        const exists = await EposterAssessment.findOne({
+            abstractId: poster._id,
+            judgeId
+        });
+
         if (exists) {
-            return res.status(400).json({ message: "Assessment already submitted. Use update endpoint." });
+            return res.status(400).json({ message: "You already submitted assessment. Use update endpoint." });
         }
 
         const assessment = await EposterAssessment.create({
@@ -57,12 +65,14 @@ export const updateEposterAssessment = async (req, res) => {
     try {
         const { abstractNo } = req.params;
         const { scores, comments } = req.body;
+        const judgeId = req.admin._id;
 
         const poster = await Eposter.findOne({ abstractNo });
         if (!poster) return res.status(404).json({ message: "ePoster not found" });
 
+        // 🔥 Update only THIS admin’s own assessment
         const updated = await EposterAssessment.findOneAndUpdate(
-            { abstractId: poster._id },
+            { abstractId: poster._id, judgeId },
             {
                 scores,
                 comments,
@@ -72,7 +82,7 @@ export const updateEposterAssessment = async (req, res) => {
         );
 
         if (!updated) {
-            return res.status(404).json({ message: "Assessment not found" });
+            return res.status(404).json({ message: "Assessment not found for this admin" });
         }
 
         res.json({

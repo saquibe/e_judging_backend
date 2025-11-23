@@ -5,16 +5,20 @@ import PresentationAssessment from "../models/PresentationAssessment.js";
 export const getSinglePresentation = async (req, res) => {
     try {
         const { abstractNo } = req.params;
+        const judgeId = req.admin._id;
 
         const pres = await Presentation.findOne({ abstractNo });
         if (!pres) return res.status(404).json({ message: "Presentation not found" });
 
-        const assessment = await PresentationAssessment.findOne({ abstractId: pres._id })
-            .populate("judgeId", "email");
+        // Get ONLY this admin’s assessment
+        const assessment = await PresentationAssessment.findOne({
+            abstractId: pres._id,
+            judgeId
+        });
 
         res.json({
             ...pres.toObject(),
-            isJudged: Boolean(assessment),
+            isJudged: Boolean(assessment), // admin-specific
             assessment: assessment || null
         });
 
@@ -34,10 +38,16 @@ export const submitPresentationAssessment = async (req, res) => {
         const pres = await Presentation.findOne({ abstractNo });
         if (!pres) return res.status(404).json({ message: "Presentation not found" });
 
-        // Prevent multiple assessments
-        const exists = await PresentationAssessment.findOne({ abstractId: pres._id });
+        // Check if THIS admin already judged THIS presentation
+        const exists = await PresentationAssessment.findOne({
+            abstractId: pres._id,
+            judgeId
+        });
+
         if (exists) {
-            return res.status(400).json({ message: "Assessment already exists. Use update." });
+            return res.status(400).json({
+                message: "You have already submitted an assessment. Use update endpoint."
+            });
         }
 
         const assessment = await PresentationAssessment.create({
@@ -59,17 +69,19 @@ export const submitPresentationAssessment = async (req, res) => {
 };
 
 
+
 // UPDATE assessment
 export const updatePresentationAssessment = async (req, res) => {
     try {
         const { abstractNo } = req.params;
         const { scores, comments } = req.body;
+        const judgeId = req.admin._id;
 
         const pres = await Presentation.findOne({ abstractNo });
         if (!pres) return res.status(404).json({ message: "Presentation not found" });
 
         const updated = await PresentationAssessment.findOneAndUpdate(
-            { abstractId: pres._id },
+            { abstractId: pres._id, judgeId },
             { scores, comments, updatedAt: new Date() },
             { new: true }
         );
