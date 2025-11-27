@@ -14,7 +14,7 @@ import adminRoutes from './src/routes/adminRoutes.js';
 import abstractRoutes from './src/routes/abstractRoutes.js';
 import eposterAssessmentRoutes from "./src/routes/eposterAssessmentRoutes.js";
 import presentationAssessmentRoutes from "./src/routes/presentationAssessmentRoutes.js";
-
+import calculationRoutes from "./src/routes/calculationRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -34,6 +34,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/abstracts', abstractRoutes);
 app.use('/api/eposter', eposterAssessmentRoutes);   // ⭐ Added new assessment routes
 app.use('/api/presentation', presentationAssessmentRoutes);
+app.use("/api/calculations", calculationRoutes);
 
 // Test Endpoint
 app.get('/', (req, res) => {

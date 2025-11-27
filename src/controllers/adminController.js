@@ -15,6 +15,8 @@ export const loginAdmin = async (req, res) => {
     res.json({
         message: "Login successful",
         token,
-        adminId: admin._id
+        adminId: admin._id,
+        name: admin.name, // Make sure this is included
+        email: admin.email
     });
 };
