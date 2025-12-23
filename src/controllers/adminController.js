@@ -5,19 +5,47 @@ import Admin from "../models/Admin.js";
 export const loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log(`Login attempt for: ${email}`);
 
     // Find admin by email
     const admin = await Admin.findOne({ email });
     if (!admin) {
+      console.log(`Admin not found: ${email}`);
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
       });
     }
 
-    // Check password
-    const isPasswordValid = await bcrypt.compare(password, admin.password);
+    // Check password - handle both hashed and plain text
+    let isPasswordValid = false;
+
+    // Check if password is hashed (bcrypt hash starts with $2)
+    if (
+      admin.password &&
+      (admin.password.startsWith("$2a$") || admin.password.startsWith("$2b$"))
+    ) {
+      // Password is hashed, use bcrypt.compare
+      isPasswordValid = await bcrypt.compare(password, admin.password);
+      console.log(`Using bcrypt.compare for ${email}: ${isPasswordValid}`);
+    } else {
+      // Password is plain text, compare directly
+      isPasswordValid = admin.password === password;
+      console.log(
+        `Using plain text comparison for ${email}: ${isPasswordValid}`
+      );
+
+      // If valid and password is plain text, hash it for future use
+      if (isPasswordValid && admin.password === password) {
+        const salt = await bcrypt.genSalt(10);
+        admin.password = await bcrypt.hash(password, salt);
+        await admin.save();
+        console.log(`✅ Password hashed for ${email}`);
+      }
+    }
+
     if (!isPasswordValid) {
+      console.log(`Invalid password for: ${email}`);
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
@@ -30,11 +58,13 @@ export const loginAdmin = async (req, res) => {
         id: admin._id,
         email: admin.email,
         name: admin.name,
-        role: admin.role,
+        role: admin.role || "judge",
       },
       process.env.JWT_SECRET,
       { expiresIn: "24h" }
     );
+
+    console.log(`✅ Login successful for: ${email}`);
 
     res.json({
       success: true,
@@ -45,7 +75,7 @@ export const loginAdmin = async (req, res) => {
           id: admin._id,
           email: admin.email,
           name: admin.name,
-          role: admin.role,
+          role: admin.role || "judge",
         },
       },
     });
