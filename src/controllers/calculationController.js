@@ -1,291 +1,307 @@
-// controllers/calculationController.js
 import Eposter from "../models/Eposter.js";
-import Presentation from "../models/Presentation.js";
+import PaperPresentation from "../models/PaperPresentation.js";
+import VideoPresentation from "../models/VideoPresentation.js";
 import EposterAssessment from "../models/EposterAssessment.js";
-import PresentationAssessment from "../models/PresentationAssessment.js";
+import PaperPresentationAssessment from "../models/PaperPresentationAssessment.js";
+import VideoPresentationAssessment from "../models/VideoPresentationAssessment.js";
 
 export const calculateResults = async (req, res) => {
-    try {
-        const { type } = req.query; // 'eposter', 'presentation', or undefined for both
+  try {
+    const { type } = req.query; // 'ePoster Presentation', 'Paper Presentation', 'Video Presentation', or undefined for all
 
-        let results = [];
+    let results = [];
 
-        if (!type || type === 'eposter') {
-            const eposterResults = await calculateEposterResults();
-            results = [...results, ...eposterResults];
-        }
-
-        if (!type || type === 'presentation') {
-            const presentationResults = await calculatePresentationResults();
-            results = [...results, ...presentationResults];
-        }
-
-        // Sort by average score (descending)
-        results.sort((a, b) => b.averageScore - a.averageScore);
-
-        res.json({
-            success: true,
-            total: results.length,
-            data: results
-        });
-
-    } catch (err) {
-        console.error('Calculation error:', err);
-        res.status(500).json({ 
-            success: false,
-            message: "Failed to calculate results" 
-        });
+    if (!type || type === "ePoster Presentation") {
+      const eposterResults = await calculateEposterResults();
+      results = [...results, ...eposterResults];
     }
+
+    if (!type || type === "Paper Presentation") {
+      const paperResults = await calculatePaperPresentationResults();
+      results = [...results, ...paperResults];
+    }
+
+    if (!type || type === "Video Presentation") {
+      const videoResults = await calculateVideoPresentationResults();
+      results = [...results, ...videoResults];
+    }
+
+    // Sort by average score (descending)
+    results.sort((a, b) => b.averageScore - a.averageScore);
+
+    res.json({
+      success: true,
+      total: results.length,
+      data: results,
+    });
+  } catch (err) {
+    console.error("Calculation error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to calculate results",
+    });
+  }
 };
 
-// Calculate ePoster results - FIXED to be consistent
 const calculateEposterResults = async () => {
-    const eposters = await Eposter.find();
-    
-    const results = await Promise.all(
-        eposters.map(async (eposter) => {
-            // Get all assessments for this eposter
-            const assessments = await EposterAssessment.find({ 
-                abstractId: eposter._id 
-            });
+  const eposters = await Eposter.find();
 
-            if (assessments.length === 0) {
-                return {
-                    id: eposter._id,
-                    abstractNo: eposter.abstractNo,
-                    author: eposter.author,
-                    title: eposter.title,
-                    track: eposter.track,
-                    type: 'eposter',
-                    totalJudges: 0,
-                    averageScore: 0,
-                    totalScore: 0,
-                    assessments: []
-                };
-            }
+  const results = await Promise.all(
+    eposters.map(async (eposter) => {
+      const assessments = await EposterAssessment.find({
+        abstractId: eposter._id,
+      });
 
-            // Calculate total scores across all judges
-            const totalScores = assessments.reduce((acc, assessment) => {
-                const judgeTotal = 
-                    assessment.scores.researchTopic +
-                    assessment.scores.methods +
-                    assessment.scores.results +
-                    assessment.scores.presentation +
-                    assessment.scores.qa;
+      if (assessments.length === 0) {
+        return null;
+      }
 
-                return {
-                    researchTopic: acc.researchTopic + assessment.scores.researchTopic,
-                    methods: acc.methods + assessment.scores.methods,
-                    results: acc.results + assessment.scores.results,
-                    presentation: acc.presentation + assessment.scores.presentation,
-                    qa: acc.qa + assessment.scores.qa,
-                    total: acc.total + judgeTotal  // ✅ Add judge's total
-                };
-            }, { researchTopic: 0, methods: 0, results: 0, presentation: 0, qa: 0, total: 0 });
+      // Calculate total score for each judge
+      const judgeTotals = assessments.map((assessment) => {
+        const scores = assessment.scores;
+        return Object.values(scores).reduce((sum, score) => sum + score, 0);
+      });
 
-            // Calculate averages (divide by number of judges)
-            const averageScores = {
-                researchTopic: totalScores.researchTopic / assessments.length,
-                methods: totalScores.methods / assessments.length,
-                results: totalScores.results / assessments.length,
-                presentation: totalScores.presentation / assessments.length,
-                qa: totalScores.qa / assessments.length
-            };
+      // Calculate category totals and averages
+      const categoryTotals = assessments.reduce((acc, assessment) => {
+        const scores = assessment.scores;
+        Object.keys(scores).forEach((key) => {
+          acc[key] = (acc[key] || 0) + scores[key];
+        });
+        return acc;
+      }, {});
 
-            // ✅ FIXED: Consistent calculation - Total Score ÷ Number of Judges
-            const overallAverage = totalScores.total / assessments.length;
+      const categoryAverages = {};
+      Object.keys(categoryTotals).forEach((key) => {
+        categoryAverages[key] = parseFloat(
+          (categoryTotals[key] / assessments.length).toFixed(2)
+        );
+      });
 
-            return {
-                id: eposter._id.toString(),
-                abstractNo: eposter.abstractNo,
-                author: eposter.author,
-                title: eposter.title,
-                track: eposter.track,
-                type: 'eposter',
-                totalJudges: assessments.length,
-                averageScore: parseFloat(overallAverage.toFixed(2)),
-                totalScore: parseFloat(totalScores.total.toFixed(2)),
-                categoryScores: averageScores,
-                assessments: assessments.map(a => ({
-                    judgeId: a.judgeId,
-                    scores: a.scores,
-                    comments: a.comments
-                }))
-            };
-        })
-    );
+      const totalScore = judgeTotals.reduce((sum, total) => sum + total, 0);
+      const averageScore = parseFloat(
+        (totalScore / assessments.length).toFixed(2)
+      );
 
-    return results;
+      return {
+        id: eposter._id.toString(),
+        abstractNo: eposter.abstractNo,
+        author: eposter.author,
+        title: eposter.title,
+        track: eposter.track,
+        type: "ePoster Presentation",
+        totalJudges: assessments.length,
+        averageScore,
+        totalScore,
+        categoryScores: categoryAverages,
+      };
+    })
+  );
+
+  return results.filter((r) => r !== null);
 };
 
-// Calculate Presentation results - Already correct
-const calculatePresentationResults = async () => {
-    const presentations = await Presentation.find();
-    
-    const results = await Promise.all(
-        presentations.map(async (presentation) => {
-            const assessments = await PresentationAssessment.find({ 
-                abstractId: presentation._id 
-            });
+const calculatePaperPresentationResults = async () => {
+  const paperPresentations = await PaperPresentation.find();
 
-            if (assessments.length === 0) {
-                return {
-                    id: presentation._id,
-                    abstractNo: presentation.abstractNo,
-                    author: presentation.author,
-                    title: presentation.title,
-                    track: presentation.track,
-                    hall: presentation.hall,
-                    type: 'presentation',
-                    totalJudges: 0,
-                    averageScore: 0,
-                    totalScore: 0,
-                    assessments: []
-                };
-            }
+  const results = await Promise.all(
+    paperPresentations.map(async (paper) => {
+      const assessments = await PaperPresentationAssessment.find({
+        abstractId: paper._id,
+      });
 
-            const totalScores = assessments.reduce((acc, assessment) => {
-                const negativeMarks = assessment.scores.negativeMarks || 0;
-                const judgeTotal = 
-                    assessment.scores.researchTopic +
-                    assessment.scores.methods +
-                    assessment.scores.results +
-                    assessment.scores.presentation +
-                    assessment.scores.qa -
-                    negativeMarks;
+      if (assessments.length === 0) {
+        return null;
+      }
 
-                return {
-                    researchTopic: acc.researchTopic + assessment.scores.researchTopic,
-                    methods: acc.methods + assessment.scores.methods,
-                    results: acc.results + assessment.scores.results,
-                    presentation: acc.presentation + assessment.scores.presentation,
-                    qa: acc.qa + assessment.scores.qa,
-                    negativeMarks: acc.negativeMarks + negativeMarks,
-                    total: acc.total + judgeTotal
-                };
-            }, { researchTopic: 0, methods: 0, results: 0, presentation: 0, qa: 0, negativeMarks: 0, total: 0 });
+      const judgeTotals = assessments.map((assessment) => {
+        const scores = assessment.scores;
+        return Object.values(scores).reduce((sum, score) => sum + score, 0);
+      });
 
-            // Calculate averages
-            const averageScores = {
-                researchTopic: totalScores.researchTopic / assessments.length,
-                methods: totalScores.methods / assessments.length,
-                results: totalScores.results / assessments.length,
-                presentation: totalScores.presentation / assessments.length,
-                qa: totalScores.qa / assessments.length,
-                negativeMarks: totalScores.negativeMarks / assessments.length
-            };
+      const categoryTotals = assessments.reduce((acc, assessment) => {
+        const scores = assessment.scores;
+        Object.keys(scores).forEach((key) => {
+          acc[key] = (acc[key] || 0) + scores[key];
+        });
+        return acc;
+      }, {});
 
-            // ✅ Already correct: Total Score ÷ Number of Judges
-            const overallAverage = totalScores.total / assessments.length;
+      const categoryAverages = {};
+      Object.keys(categoryTotals).forEach((key) => {
+        categoryAverages[key] = parseFloat(
+          (categoryTotals[key] / assessments.length).toFixed(2)
+        );
+      });
 
-            return {
-                id: presentation._id.toString(),
-                abstractNo: presentation.abstractNo,
-                author: presentation.author,
-                title: presentation.title,
-                track: presentation.track,
-                hall: presentation.hall,
-                type: 'presentation',
-                totalJudges: assessments.length,
-                averageScore: parseFloat(overallAverage.toFixed(2)),
-                totalScore: parseFloat(totalScores.total.toFixed(2)),
-                categoryScores: averageScores,
-                assessments: assessments.map(a => ({
-                    judgeId: a.judgeId,
-                    scores: a.scores,
-                    comments: a.comments
-                }))
-            };
-        })
-    );
+      const totalScore = judgeTotals.reduce((sum, total) => sum + total, 0);
+      const averageScore = parseFloat(
+        (totalScore / assessments.length).toFixed(2)
+      );
 
-    return results;
+      return {
+        id: paper._id.toString(),
+        abstractNo: paper.abstractNo,
+        author: paper.author,
+        title: paper.title,
+        track: paper.track,
+        hall: paper.hall,
+        type: "Paper Presentation",
+        totalJudges: assessments.length,
+        averageScore,
+        totalScore,
+        categoryScores: categoryAverages,
+      };
+    })
+  );
+
+  return results.filter((r) => r !== null);
 };
 
-// Get detailed results for a single abstract
+const calculateVideoPresentationResults = async () => {
+  const videoPresentations = await VideoPresentation.find();
+
+  const results = await Promise.all(
+    videoPresentations.map(async (video) => {
+      const assessments = await VideoPresentationAssessment.find({
+        abstractId: video._id,
+      });
+
+      if (assessments.length === 0) {
+        return null;
+      }
+
+      const judgeTotals = assessments.map((assessment) => {
+        const scores = assessment.scores;
+        return Object.values(scores).reduce((sum, score) => sum + score, 0);
+      });
+
+      const categoryTotals = assessments.reduce((acc, assessment) => {
+        const scores = assessment.scores;
+        Object.keys(scores).forEach((key) => {
+          acc[key] = (acc[key] || 0) + scores[key];
+        });
+        return acc;
+      }, {});
+
+      const categoryAverages = {};
+      Object.keys(categoryTotals).forEach((key) => {
+        categoryAverages[key] = parseFloat(
+          (categoryTotals[key] / assessments.length).toFixed(2)
+        );
+      });
+
+      const totalScore = judgeTotals.reduce((sum, total) => sum + total, 0);
+      const averageScore = parseFloat(
+        (totalScore / assessments.length).toFixed(2)
+      );
+
+      return {
+        id: video._id.toString(),
+        abstractNo: video.abstractNo,
+        author: video.author,
+        title: video.title,
+        track: video.track,
+        hall: video.hall,
+        type: "Video Presentation",
+        totalJudges: assessments.length,
+        averageScore,
+        totalScore,
+        categoryScores: categoryAverages,
+      };
+    })
+  );
+
+  return results.filter((r) => r !== null);
+};
+
 export const getAbstractResults = async (req, res) => {
-    try {
-        const { abstractNo } = req.params;
-        const { type } = req.query; // 'eposter' or 'presentation'
+  try {
+    const { abstractNo } = req.params;
+    const { type } = req.query; // 'ePoster Presentation', 'Paper Presentation', 'Video Presentation'
 
-        let abstract, assessments;
+    let abstract, assessments;
 
-        if (type === 'eposter') {
-            abstract = await Eposter.findOne({ abstractNo });
-            if (!abstract) return res.status(404).json({ message: "ePoster not found" });
-            
-            assessments = await EposterAssessment.find({ abstractId: abstract._id })
-                .populate('judgeId', 'email');
-        } else if (type === 'presentation') {
-            abstract = await Presentation.findOne({ abstractNo });
-            if (!abstract) return res.status(404).json({ message: "Presentation not found" });
-            
-            assessments = await PresentationAssessment.find({ abstractId: abstract._id })
-                .populate('judgeId', 'email');
-        } else {
-            return res.status(400).json({ message: "Type parameter required" });
-        }
+    if (type === "ePoster Presentation") {
+      abstract = await Eposter.findOne({ abstractNo });
+      if (!abstract)
+        return res.status(404).json({ message: "ePoster not found" });
 
-        if (assessments.length === 0) {
-            return res.json({
-                abstract,
-                totalJudges: 0,
-                averageScore: 0,
-                message: "No assessments yet"
-            });
-        }
+      assessments = await EposterAssessment.find({ abstractId: abstract._id });
+    } else if (type === "Paper Presentation") {
+      abstract = await PaperPresentation.findOne({ abstractNo });
+      if (!abstract)
+        return res
+          .status(404)
+          .json({ message: "Paper presentation not found" });
 
-        // Calculate averages (same logic as above)
-        const totalScores = assessments.reduce((acc, assessment) => {
-            const scores = assessment.scores;
-            if (type === 'presentation') {
-                const negativeMarks = scores.negativeMarks || 0;
-                const total = Object.values(scores).reduce((sum, score) => 
-                    typeof score === 'number' ? sum + score : sum, 0) - negativeMarks;
-                
-                return {
-                    researchTopic: acc.researchTopic + scores.researchTopic,
-                    methods: acc.methods + scores.methods,
-                    results: acc.results + scores.results,
-                    presentation: acc.presentation + scores.presentation,
-                    qa: acc.qa + scores.qa,
-                    negativeMarks: acc.negativeMarks + negativeMarks,
-                    total: acc.total + total
-                };
-            } else {
-                return {
-                    researchTopic: acc.researchTopic + scores.researchTopic,
-                    methods: acc.methods + scores.methods,
-                    results: acc.results + scores.results,
-                    presentation: acc.presentation + scores.presentation,
-                    qa: acc.qa + scores.qa,
-                    total: acc.total + Object.values(scores).reduce((sum, score) => sum + score, 0)
-                };
-            }
-        }, { researchTopic: 0, methods: 0, results: 0, presentation: 0, qa: 0, negativeMarks: 0, total: 0 });
+      assessments = await PaperPresentationAssessment.find({
+        abstractId: abstract._id,
+      });
+    } else if (type === "Video Presentation") {
+      abstract = await VideoPresentation.findOne({ abstractNo });
+      if (!abstract)
+        return res
+          .status(404)
+          .json({ message: "Video presentation not found" });
 
-        const averageScores = {};
-        Object.keys(totalScores).forEach(key => {
-            averageScores[key] = parseFloat((totalScores[key] / assessments.length).toFixed(2));
-        });
-
-        res.json({
-            abstract,
-            totalJudges: assessments.length,
-            averageScore: averageScores.total,
-            categoryAverages: averageScores,
-            individualAssessments: assessments
-        });
-
-    } catch (err) {
-        console.error('Single abstract results error:', err);
-        res.status(500).json({ message: "Failed to calculate results" });
+      assessments = await VideoPresentationAssessment.find({
+        abstractId: abstract._id,
+      });
+    } else {
+      return res.status(400).json({ message: "Type parameter required" });
     }
+
+    if (assessments.length === 0) {
+      return res.json({
+        abstract,
+        totalJudges: 0,
+        averageScore: 0,
+        message: "No assessments yet",
+      });
+    }
+
+    // Calculate averages
+    const judgeTotals = assessments.map((assessment) => {
+      const scores = assessment.scores;
+      return Object.values(scores).reduce((sum, score) => sum + score, 0);
+    });
+
+    const categoryTotals = assessments.reduce((acc, assessment) => {
+      const scores = assessment.scores;
+      Object.keys(scores).forEach((key) => {
+        acc[key] = (acc[key] || 0) + scores[key];
+      });
+      return acc;
+    }, {});
+
+    const categoryAverages = {};
+    Object.keys(categoryTotals).forEach((key) => {
+      categoryAverages[key] = parseFloat(
+        (categoryTotals[key] / assessments.length).toFixed(2)
+      );
+    });
+
+    const totalScore = judgeTotals.reduce((sum, total) => sum + total, 0);
+    const averageScore = parseFloat(
+      (totalScore / assessments.length).toFixed(2)
+    );
+
+    res.json({
+      success: true,
+      data: {
+        abstract,
+        totalJudges: assessments.length,
+        averageScore,
+        categoryAverages,
+        individualAssessments: assessments,
+      },
+    });
+  } catch (err) {
+    console.error("Single abstract results error:", err);
+    res.status(500).json({
+      success: false,
+      message: "Failed to calculate results for abstract",
+    });
+  }
 };
-
-
-
-
-
-
-
