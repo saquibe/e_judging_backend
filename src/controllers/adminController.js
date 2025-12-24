@@ -1,44 +1,34 @@
-// adminController.js - Make sure both functions are exported
+// adminController.js
 import jwt from "jsonwebtoken";
-import bcrypt from "bcryptjs";
 import Admin from "../models/Admin.js";
 
 export const loginAdmin = async (req, res) => {
   try {
     const { email, password } = req.body;
+    console.log(`Login attempt for: ${email}`);
 
     // Find admin by email
     const admin = await Admin.findOne({ email });
     if (!admin) {
+      console.log(`Admin not found: ${email}`);
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
       });
     }
 
-    // Check password - handle both hashed and plain text
-    let isPasswordValid = false;
+    console.log(`Admin found: ${admin.email}`);
+    console.log(`Password in DB: ${admin.password}`);
 
-    // Check if password is hashed (bcrypt hash starts with $2)
-    if (
-      admin.password &&
-      (admin.password.startsWith("$2a$") || admin.password.startsWith("$2b$"))
-    ) {
-      // Password is hashed, use bcrypt.compare
-      isPasswordValid = await bcrypt.compare(password, admin.password);
-    } else {
-      // Password is plain text, compare directly
-      isPasswordValid = admin.password === password;
+    // SIMPLE PLAIN TEXT COMPARISON - No hashing
+    const isPasswordValid = admin.password === password;
 
-      // If valid and password is plain text, hash it for future use
-      if (isPasswordValid && admin.password === password) {
-        const salt = await bcrypt.genSalt(10);
-        admin.password = await bcrypt.hash(password, salt);
-        await admin.save();
-      }
-    }
+    console.log(`Password comparison result: ${isPasswordValid}`);
+    console.log(`Input password: ${password}`);
+    console.log(`DB password: ${admin.password}`);
 
     if (!isPasswordValid) {
+      console.log(`Invalid password for: ${email}`);
       return res.status(401).json({
         success: false,
         message: "Invalid credentials",
@@ -57,6 +47,8 @@ export const loginAdmin = async (req, res) => {
       { expiresIn: "24h" }
     );
 
+    console.log(`✅ Login successful for: ${email}`);
+
     res.json({
       success: true,
       message: "Login successful",
@@ -72,14 +64,14 @@ export const loginAdmin = async (req, res) => {
     });
   } catch (err) {
     console.error("Login error:", err);
+    console.error("Error stack:", err.stack);
     res.status(500).json({
       success: false,
-      message: "Server error during login",
+      message: "Server error during login: " + err.message,
     });
   }
 };
 
-// Make sure this function is exported
 export const getAdminProfile = async (req, res) => {
   try {
     const admin = await Admin.findById(req.admin.id).select("-password");
