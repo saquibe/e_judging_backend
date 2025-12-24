@@ -1,3 +1,4 @@
+// adminController.js - Make sure both functions are exported
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import Admin from "../models/Admin.js";
@@ -78,6 +79,7 @@ export const loginAdmin = async (req, res) => {
   }
 };
 
+// Make sure this function is exported
 export const getAdminProfile = async (req, res) => {
   try {
     const admin = await Admin.findById(req.admin.id).select("-password");
