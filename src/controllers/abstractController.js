@@ -52,7 +52,7 @@ export const getAllAbstracts = async (req, res) => {
         author: e.author,
         title: e.title,
         track: e.track,
-        hall: null,
+        hall: e.hall,
         type: "ePoster Presentation",
         isJudged: myEposterMap.has(e._id.toString()),
       })),
