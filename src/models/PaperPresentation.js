@@ -6,6 +6,9 @@ const paperPresentationSchema = new mongoose.Schema({
   title: { type: String, required: true },
   track: { type: String, required: true },
   hall: String,
+  date: String,
+  startTime: String,
+  endTime: String,
 });
 
 export default mongoose.model("PaperPresentation", paperPresentationSchema);
