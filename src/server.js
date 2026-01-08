@@ -22,22 +22,22 @@ connectDB();
 
 const app = express();
 
-// app.use(
-//   cors({
-//     origin: process.env.FRONTEND_URL || "http://localhost:5173",
-//     credentials: true,
-//   })
-// );
-// app.use(express.json());
-
 app.use(
   cors({
-    origin: ["https://eposter-one.vercel.app", "https://eposter.expocon.app"],
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
     credentials: true,
   })
 );
+app.use(express.json());
+
+// app.use(
+//   cors({
+//     origin: ["https://eposter-one.vercel.app", "https://eposter.expocon.app"],
+//     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+//     allowedHeaders: ["Content-Type", "Authorization"],
+//     credentials: true,
+//   })
+// );
 
 // Routes
 app.use("/api/auth", authRoutes);
